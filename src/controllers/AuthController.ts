@@ -1,94 +1,68 @@
 import { User } from '../models/User';
-import { UserRole } from '../types';
 
 const API_BASE_URL = 'http://localhost:5000/api/auth';
+const TOKEN_KEY = 'medicalToken';
 
 export class AuthController {
-  static async login(email: string, password: string, crm?: string): Promise<User> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          email, 
-          password,
-          crm // ← ADICIONADO CRM
-        }),
-      });
+  static async register(name: string, email: string, password: string): Promise<User> {
+    const response = await fetch(`${API_BASE_URL}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password }),
+    });
 
-      const data = await response.json();
+    const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.message || 'Erro ao fazer login');
-      }
-
-      const user = User.fromJSON(data.user);
-
-      // Salva token e dados do usuário no localStorage
-      localStorage.setItem('medicalToken', data.token);
-      localStorage.setItem('medicalUser', JSON.stringify(user.toJSON()));
-
-      return user;
-    } catch (error: any) {
-      throw new Error(error.message || 'Erro ao conectar com o servidor');
+    if (!response.ok) {
+      throw new Error(data.message || 'Erro ao criar conta');
     }
+
+    sessionStorage.setItem(TOKEN_KEY, data.token);
+    return User.fromJSON(data.user);
   }
 
-  static async register(
-    name: string,
-    email: string,
-    password: string,
-    role: UserRole,
-    crm?: string
-  ): Promise<User> {
+  static async login(email: string, password: string): Promise<User> {
+    const response = await fetch(`${API_BASE_URL}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Erro ao fazer login');
+    }
+
+    sessionStorage.setItem(TOKEN_KEY, data.token);
+    return User.fromJSON(data.user);
+  }
+
+  static async getMe(): Promise<User | null> {
+    const token = sessionStorage.getItem(TOKEN_KEY);
+    if (!token) return null;
+
     try {
-      const response = await fetch(`${API_BASE_URL}/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name,
-          email,
-          password,
-          role,
-          crm: crm,
-        }),
+      const response = await fetch(`${API_BASE_URL}/me`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.message || 'Erro ao registrar');
+        sessionStorage.removeItem(TOKEN_KEY);
+        return null;
       }
 
-      const user = User.fromJSON(data.user);
-
-      localStorage.setItem('medicalToken', data.token);
-      localStorage.setItem('medicalUser', JSON.stringify(user.toJSON()));
-
-      return user;
-    } catch (error: any) {
-      throw new Error(error.message || 'Erro ao conectar com o servidor');
+      return User.fromJSON(await response.json());
+    } catch {
+      return null;
     }
   }
 
   static logout(): void {
-    localStorage.removeItem('medicalToken');
-    localStorage.removeItem('medicalUser');
-  }
-
-  static getCurrentUser(): User | null {
-    const userData = localStorage.getItem('medicalUser');
-    if (userData) {
-      return User.fromJSON(JSON.parse(userData));
-    }
-    return null;
+    sessionStorage.removeItem(TOKEN_KEY);
   }
 
   static getToken(): string | null {
-    return localStorage.getItem('medicalToken');
+    return sessionStorage.getItem(TOKEN_KEY);
   }
 }

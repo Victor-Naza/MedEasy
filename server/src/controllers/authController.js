@@ -3,101 +3,73 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/user');
 
 exports.register = async (req, res) => {
-  console.log('🔍 Dados recebidos:', req.body); // Debug
-  
-  const { name, email, password, role, crm } = req.body;
+  const { name, email, password } = req.body;
+
+  if (!name || !email || !password) {
+    return res.status(400).json({ message: 'Nome, e-mail e senha são obrigatórios' });
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({ message: 'A senha deve ter no mínimo 6 caracteres' });
+  }
 
   try {
-    console.log('🔍 Verificando usuário existente...'); // Debug
-    const exists = await User.findOne({ where: { email } });
-    if (exists) {
-      console.log('⚠️ Usuário já existe:', email);
-      return res.status(400).json({ message: 'Usuário já cadastrado' });
+    const usuarioExistente = await User.findOne({ where: { email } });
+    if (usuarioExistente) {
+      return res.status(400).json({ message: 'Já existe uma conta com este e-mail' });
     }
 
-    console.log('🔍 Criando hash da senha...'); // Debug
     const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await User.create({ name, email, password: hashedPassword, role: 'médico' });
 
-    console.log('🔍 Criando usuário no banco...'); // Debug
-    const user = await User.create({
-      name,
-      email,
-      password: hashedPassword,
-      role,
-      crm,
-    });
-
-    console.log('✅ Usuário criado com sucesso:', user.id); // Debug
-
-    console.log('🔍 Gerando JWT token...'); // Debug
     const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, {
       expiresIn: '1d',
     });
 
-    console.log('✅ Registro concluído com sucesso!'); // Debug
-    res.status(201).json({ 
-      user: { 
-        id: user.id, 
-        name: user.name, 
-        email: user.email, 
-        role: user.role,
-        crm: user.crm // ← ADICIONADO
-      }, 
-      token 
+    res.status(201).json({
+      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      token,
     });
   } catch (err) {
-    console.error('❌ Erro completo:', err); // Debug detalhado
-    console.error('❌ Stack trace:', err.stack); // Stack trace completo
-    res.status(500).json({ message: 'Erro ao registrar', error: err.message });
+    res.status(500).json({ message: 'Erro ao criar conta', error: err.message });
+  }
+};
+
+exports.me = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'Usuário não encontrado' });
+    }
+    res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
+  } catch (err) {
+    res.status(500).json({ message: 'Erro ao buscar usuário', error: err.message });
   }
 };
 
 exports.login = async (req, res) => {
-  console.log('🔍 Tentativa de login:', req.body.email); // Debug
-  
-  const { email, password, crm } = req.body; // ← ADICIONADO CRM
-  
+  const { email, password } = req.body;
+
   try {
-    console.log('🔍 Buscando usuário no banco...'); // Debug
     const user = await User.findOne({ where: { email } });
     if (!user) {
-      console.log('⚠️ Usuário não encontrado:', email);
-      return res.status(400).json({ message: 'Credenciais inválidas' }); // ← Mensagem genérica por segurança
+      return res.status(400).json({ message: 'Credenciais inválidas' });
     }
 
-    console.log('🔍 Verificando senha...'); // Debug
     const match = await bcrypt.compare(password, user.password);
     if (!match) {
-      console.log('⚠️ Senha incorreta para:', email);
-      return res.status(400).json({ message: 'Credenciais inválidas' }); // ← Mensagem genérica por segurança
+      return res.status(400).json({ message: 'Credenciais inválidas' });
     }
 
-    // ← NOVA VALIDAÇÃO: Verificar se o CRM corresponde ao email
-    if (crm && user.crm !== crm) {
-      console.log('⚠️ CRM não corresponde ao email:', email, 'CRM fornecido:', crm, 'CRM cadastrado:', user.crm);
-      return res.status(400).json({ message: 'CRM não corresponde ao email cadastrado' });
-    }
-
-    console.log('🔍 Gerando JWT token para login...'); // Debug
     const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, {
       expiresIn: '1d',
     });
 
-    console.log('✅ Login realizado com sucesso:', email); // Debug
-    console.log('🔍 Dados do usuário:', { id: user.id, name: user.name, email: user.email, role: user.role, crm: user.crm }); // Debug
-    res.json({ 
-      user: { 
-        id: user.id, 
-        name: user.name, 
-        email: user.email, 
-        role: user.role,
-        crm: user.crm
-      }, 
-      token 
+    res.json({
+      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      token,
     });
   } catch (err) {
-    console.error('❌ Erro no login:', err); // Debug detalhado
-    console.error('❌ Stack trace:', err.stack); // Stack trace completo
     res.status(500).json({ message: 'Erro ao logar', error: err.message });
   }
 };

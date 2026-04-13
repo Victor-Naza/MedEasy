@@ -24,6 +24,7 @@
 - **Node.js** - Ambiente de execução JavaScript
 - **Express 4.17.1 / 5.1.0** - Framework web para Node.js
 - **Sequelize 6.37.7** - ORM para Node.js
+- **SQLite3 6.x** - Banco local em arquivo para desenvolvimento
 - **MySQL2 3.14.1** - Driver MySQL para Node.js
 - **JWT (jsonwebtoken 9.0.2)** - Autenticação por token
 - **Bcrypt/Bcryptjs** - Criptografia de senhas
@@ -469,18 +470,15 @@ npm install
 # Copie o conteúdo abaixo e ajuste com suas credenciais
 ```
 
-**Arquivo `.env` do servidor:**
+**Arquivo `.env` do servidor (SQLite local por padrao):**
 
 ```env
 # Porta do servidor
 PORT=5000
 
-# Banco de dados MySQL
-DB_HOST=localhost
-DB_USER=seu_usuario
-DB_PASSWORD=sua_senha
-DB_NAME=medeasy_db
-DB_DIALECT=mysql
+# Banco de dados local em arquivo
+DB_DIALECT=sqlite
+DB_STORAGE=./data/medeasy.sqlite
 
 # JWT Secret (use uma string aleatória e segura)
 JWT_SECRET=sua_chave_secreta_super_segura_aqui
@@ -490,6 +488,12 @@ GOOGLE_API_KEY=sua_chave_api_do_google_aqui
 ```
 
 ### **3. Configurar Banco de Dados**
+
+Para desenvolvimento local, nenhum banco externo precisa ser criado.
+
+Ao iniciar o backend, o Sequelize cria automaticamente o arquivo SQLite em `server/data/medeasy.sqlite` e gera as tabelas.
+
+As instrucoes em MySQL abaixo passam a ser opcionais, apenas para quem quiser usar um banco externo.
 
 ```sql
 -- Criar banco de dados
@@ -646,11 +650,8 @@ npm run electron
 
 ```env
 PORT=5000
-DB_HOST=localhost
-DB_USER=root
-DB_PASSWORD=sua_senha
-DB_NAME=medeasy_db
-DB_DIALECT=mysql
+DB_DIALECT=sqlite
+DB_STORAGE=./data/medeasy.sqlite
 JWT_SECRET=chave_secreta_jwt
 GOOGLE_API_KEY=chave_api_google_gemini
 ```

@@ -1,18 +1,23 @@
 {
-  "name": "meu-servidor-express",
+  "name": "meadeasy-server",
   "version": "1.0.0",
-  "description": "Um servidor Express simples com CORS configurado.",
+  "description": "Meadeeasy server",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "bcrypt": "^6.0.0",
+    "@supabase/supabase-js": "^2.49.4",
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
+    "dotenv": "^17.3.1",
     "express": "^4.17.1",
     "jsonwebtoken": "^9.0.2",
-    "mysql2": "^3.14.1",
+    "nodemailer": "^8.0.5",
+    "pg": "^8.13.3",
+    "pg-hstore": "^2.3.4",
+    "resend": "^6.11.0",
     "sequelize": "^6.37.7"
   },
   "author": "",

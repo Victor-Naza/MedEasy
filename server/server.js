@@ -11,10 +11,10 @@ const adminRoutes = require('./src/routes/adminRoutes');
 const transcriptionRoutes = require('./src/routes/transcriptionRoutes');
 const { sequelize } = require('./src/services/db');
 
-console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'OK' : 'NAO ENCONTRADO');
-console.log('SUPABASE_URL:', process.env.SUPABASE_URL ? 'OK' : 'NAO ENCONTRADO');
-console.log('OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? 'OK' : 'NAO ENCONTRADO (transcricao desativada)');
-console.log('GOOGLE_API_KEY:', process.env.GOOGLE_API_KEY ? 'OK' : 'NAO ENCONTRADO');
+console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'OK' : 'NOT FOUND');
+console.log('SUPABASE_URL:', process.env.SUPABASE_URL ? 'OK' : 'NOT FOUND');
+console.log('OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? 'OK' : 'NOT FOUND (transcription disabled)');
+console.log('GOOGLE_API_KEY:', process.env.GOOGLE_API_KEY ? 'OK' : 'NOT FOUND');
 
 const app = express();
 app.use(cors());
@@ -23,38 +23,39 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/medicamentos', medicamentoRoutes);
 app.use('/api/medicamentos/admin', adminRoutes);
-app.use('/api/transcricao', transcriptionRoutes);
+app.use('/api/transcription', transcriptionRoutes);
 
-// IA para sugestoes (Gemini primario, OpenAI fallback — via iaRoute)
+// AI suggestions: Gemini (primary), OpenAI (fallback)
 let geminiSuggestionModel = null;
 try {
   const { GoogleGenerativeAI } = require('@google/generative-ai');
   if (process.env.GOOGLE_API_KEY) {
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
     geminiSuggestionModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-    console.log('IA Sugestoes (Gemini): configurada');
+    console.log('AI suggestions (Gemini): configured');
   } else {
-    console.log('IA Sugestoes: GOOGLE_API_KEY ausente, usando OpenAI se disponivel');
+    console.log('AI suggestions: GOOGLE_API_KEY not set, falling back to OpenAI if available');
   }
 } catch (error) {
-  console.log('Gemini nao configurado:', error.message);
+  console.log('Gemini not configured:', error.message);
 }
-const iaRoutes = require('./src/routes/iaRoute')(geminiSuggestionModel);
-app.use('/api', iaRoutes);
+const aiRoutes = require('./src/routes/aiRoute')(geminiSuggestionModel);
+app.use('/api', aiRoutes);
 
 require('./src/models/associations');
 
 const PORT = process.env.PORT || 5001;
 
 sequelize.sync().then(() => {
-  console.log('Banco sincronizado');
+  console.log('Database synced');
   app.listen(PORT, () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
     console.log('  POST /api/auth/login');
     console.log('  POST /api/auth/register');
     console.log('  GET  /api/auth/me');
-    console.log('  POST /api/transcricao/transcrever');
-    console.log('  POST /api/transcricao/salvar');
-    console.log('  GET  /api/transcricao/listar');
+    console.log('  POST /api/transcription/transcribe');
+    console.log('  POST /api/transcription/save');
+    console.log('  GET  /api/transcription/list');
+    console.log('  POST /api/ai-suggestion');
   });
 });

@@ -7,7 +7,6 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
-  crm?: string;
 }
 
 export interface Patient {
@@ -26,7 +25,6 @@ export interface Prescription {
   date: string;
   doctorId: string;
   doctorName: string;
-  doctorCrm: string;
 }
 
 export interface DosageCalculation {

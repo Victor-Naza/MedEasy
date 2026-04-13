@@ -64,9 +64,6 @@ const Layout: React.FC<LayoutProps> = ({ children, title }) => {
           <p className="text-sm text-gray-700">Conectado como:</p>
           <p className="font-medium text-blue-700">{currentUser?.name}</p>
           <p className="text-xs text-gray-500 capitalize">{currentUser?.role}</p>
-          {currentUser?.role === UserRole.DOCTOR && (
-            <p className="text-xs text-gray-500">CRM: {currentUser?.crm}</p>
-          )}
         </div>
         
         <nav className="mt-4 px-2 space-y-1">

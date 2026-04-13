@@ -58,7 +58,6 @@ ${treatment}
 
 INFORMAÇÕES DO MÉDICO
 Dr(a). ${currentUser?.name}
-CRM: ${currentUser?.crm}
       `.trim();
       setSavedPrescription(prescriptionText);
       setShowSuccess(true);
@@ -105,7 +104,6 @@ CRM: ${currentUser?.crm}
             <div class="doctor-info">
               <p>____________________________________</p>
               <p>Dr(a). ${currentUser?.name}</p>
-              <p>CRM: ${currentUser?.crm}</p>
             </div>
           </div>
         </body>

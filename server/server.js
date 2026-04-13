@@ -5,10 +5,10 @@ const dotenv = require('dotenv');
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
-const authRoutes = require('./routes/authRoutes');
-const medicamentoRoutes = require('./routes/medicamentoRoutes');
-const adminRoutes = require('./routes/adminRoutes');
-const { sequelize } = require('./services/db');
+const authRoutes = require('./src/routes/authRoutes');
+const medicamentoRoutes = require('./src/routes/medicamentoRoutes');
+const adminRoutes = require('./src/routes/adminRoutes');
+const { sequelize } = require('./src/services/db');
 
 console.log('DATABASE_URL:', process.env.DATABASE_URL ? '✅ Definido' : '❌ Não encontrado');
 console.log('SUPABASE_URL:', process.env.SUPABASE_URL ? '✅ Definido' : '❌ Não encontrado');
@@ -27,7 +27,7 @@ try {
   if (process.env.GOOGLE_API_KEY) {
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-    const iaRoutes = require('./routes/iaRoute')(model);
+    const iaRoutes = require('./src/routes/iaRoute')(model);
     app.use('/api', iaRoutes);
     console.log('✅ IA (Gemini) configurada');
   }
@@ -35,7 +35,7 @@ try {
   console.log('⚠️ IA não configurada:', error.message);
 }
 
-require('./models/associations');
+require('./src/models/associations');
 
 const PORT = process.env.PORT || 5001;
 

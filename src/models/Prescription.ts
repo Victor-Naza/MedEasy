@@ -7,7 +7,6 @@ export class Prescription {
   date: Date;
   doctorId: string;
   doctorName: string;
-  doctorCrm: string;
 
   constructor(data: {
     id: string;
@@ -18,7 +17,7 @@ export class Prescription {
     date: Date;
     doctorId: string;
     doctorName: string;
-    doctorCrm: string;
+
   }) {
     this.id = data.id;
     this.patientName = data.patientName;
@@ -28,7 +27,6 @@ export class Prescription {
     this.date = data.date;
     this.doctorId = data.doctorId;
     this.doctorName = data.doctorName;
-    this.doctorCrm = data.doctorCrm;
   }
 
   static fromJSON(json: any): Prescription {
@@ -48,7 +46,6 @@ export class Prescription {
       date: this.date.toISOString(),
       doctorId: this.doctorId,
       doctorName: this.doctorName,
-      doctorCrm: this.doctorCrm,
     };
   }
 }

@@ -109,11 +109,6 @@ const Dashboard: React.FC = () => {
               <span className="font-medium">Tipo de Usuário:</span>{' '}
               <span className="capitalize">{currentUser?.role}</span>
             </p>
-            {currentUser?.role === UserRole.DOCTOR && (
-              <p className="text-sm">
-                <span className="font-medium">CRM:</span> {currentUser?.crm}
-              </p>
-            )}
             <p className="text-sm">
               <span className="font-medium">E-mail:</span> {currentUser?.email}
             </p>

@@ -1,5 +1,7 @@
 const Categoria = require('./categoria');
 const Medicamento = require('./medicamento');
+const User = require('./user');
+const Transcricao = require('./transcricao');
 
 Categoria.hasMany(Medicamento, {
   foreignKey: 'id_categoria',
@@ -11,4 +13,14 @@ Medicamento.belongsTo(Categoria, {
   as: 'categoria'
 });
 
-module.exports = { Categoria, Medicamento };
+User.hasMany(Transcricao, {
+  foreignKey: 'user_id',
+  as: 'transcricoes'
+});
+
+Transcricao.belongsTo(User, {
+  foreignKey: 'user_id',
+  as: 'usuario'
+});
+
+module.exports = { Categoria, Medicamento, User, Transcricao };

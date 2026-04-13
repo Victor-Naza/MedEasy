@@ -5,6 +5,7 @@ import Register from './views/Register';
 import Dashboard from './views/Dashboard';
 import CreatePrescription from './views/CreatePrescription';
 import Medications from './views/Medications';
+import Transcription from './views/Transcription';
 import ProtectedRoute from './components/ProtectedRoute';
 import { UserRole } from './types';
 
@@ -33,6 +34,12 @@ function App() {
             <Route path="/dosage" element={
               <ProtectedRoute>
                 <Medications />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/transcricao" element={
+              <ProtectedRoute allowedRoles={[UserRole.DOCTOR]}>
+                <Transcription />
               </ProtectedRoute>
             } />
           </Routes>

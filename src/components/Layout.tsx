@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { UserRole } from '../types';
-import { LogOut, User, FileText, Calculator, Menu, X } from 'lucide-react';
+import { LogOut, User, FileText, Calculator, Menu, X, Mic } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -36,6 +36,12 @@ const Layout: React.FC<LayoutProps> = ({ children, title }) => {
       name: 'Medicamentos',
       icon: <Calculator className="w-5 h-5" />,
       path: '/dosage',
+      roles: [UserRole.DOCTOR],
+    },
+    {
+      name: 'Transcrição de Consultas',
+      icon: <Mic className="w-5 h-5" />,
+      path: '/transcricao',
       roles: [UserRole.DOCTOR],
     },
   ];

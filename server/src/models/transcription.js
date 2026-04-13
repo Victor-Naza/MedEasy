@@ -1,8 +1,8 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../services/db');
 
-const Transcricao = sequelize.define(
-  'Transcricao',
+const Transcription = sequelize.define(
+  'Transcription',
   {
     id: {
       type: DataTypes.UUID,
@@ -14,20 +14,22 @@ const Transcricao = sequelize.define(
       allowNull: false,
       field: 'user_id',
     },
-    titulo: {
+    title: {
       type: DataTypes.STRING(255),
-      defaultValue: 'Consulta sem título',
+      defaultValue: 'Untitled consultation',
+      field: 'titulo',
     },
-    conteudo: {
+    content: {
       type: DataTypes.TEXT,
       defaultValue: '',
+      field: 'conteudo',
     },
-    pacienteNome: {
+    patientName: {
       type: DataTypes.STRING(255),
       allowNull: true,
       field: 'paciente_nome',
     },
-    duracaoSegundos: {
+    durationSeconds: {
       type: DataTypes.INTEGER,
       defaultValue: 0,
       field: 'duracao_segundos',
@@ -35,8 +37,8 @@ const Transcricao = sequelize.define(
   },
   {
     tableName: 'transcricoes',
-    underscored: true, // createdAt → created_at, updatedAt → updated_at
+    underscored: true, // maps createdAt -> created_at, updatedAt -> updated_at
   }
 );
 
-module.exports = Transcricao;
+module.exports = Transcription;

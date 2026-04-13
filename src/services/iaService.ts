@@ -1,9 +1,8 @@
-// src/services/iaService.ts
 export async function getTreatmentSuggestion(symptoms: string): Promise<string> {
-  const response = await fetch('http://localhost:5000/api/ia-suggestion', {
+  const response = await fetch('http://localhost:5000/api/ai-suggestion', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ symptoms })
+    body: JSON.stringify({ symptoms }),
   });
   const data = await response.json();
   return data.suggestion;

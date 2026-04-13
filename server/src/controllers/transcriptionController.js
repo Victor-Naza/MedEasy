@@ -1,9 +1,7 @@
 const fs = require('fs');
-const Transcricao = require('../models/transcricao');
+const Transcription = require('../models/transcription');
 
-// ─────────────────────────────────────────────────────────────
-// Inicialização dos clientes de IA
-// ─────────────────────────────────────────────────────────────
+// Initialize AI clients
 let openai = null;
 if (process.env.OPENAI_API_KEY) {
   const { OpenAI } = require('openai');
@@ -15,27 +13,24 @@ if (process.env.GOOGLE_API_KEY) {
   try {
     const { GoogleGenerativeAI } = require('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-    // gemini-1.5-flash aceita áudio como inline data
+    // gemini-1.5-flash supports audio as inline data
     geminiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-  } catch (e) {
-    console.error('⚠️ Gemini não disponível para transcrição:', e.message);
+  } catch (err) {
+    console.error('Gemini not available for transcription:', err.message);
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// POST /api/transcricao/transcrever
-// Usa Whisper (OpenAI) como primário; Gemini como fallback.
-// ─────────────────────────────────────────────────────────────
+// POST /api/transcription/transcribe
+// Uses Whisper (OpenAI) as primary; Gemini as fallback.
 async function transcribeAudio(req, res) {
   if (!openai && !geminiModel) {
     return res.status(503).json({
-      error:
-        'Nenhuma API de transcrição configurada. Adicione OPENAI_API_KEY e/ou GOOGLE_API_KEY no .env.',
+      error: 'No transcription API configured. Add OPENAI_API_KEY and/or GOOGLE_API_KEY to .env.',
     });
   }
 
   if (!req.file) {
-    return res.status(400).json({ error: 'Nenhum arquivo de áudio enviado.' });
+    return res.status(400).json({ error: 'No audio file provided.' });
   }
 
   const filePath = req.file.path;
@@ -45,7 +40,7 @@ async function transcribeAudio(req, res) {
     let engine = '';
 
     if (openai) {
-      // ── Whisper (OpenAI) ──────────────────────────────────
+      // Whisper (OpenAI)
       engine = 'whisper-1';
       const result = await openai.audio.transcriptions.create({
         file: fs.createReadStream(filePath),
@@ -53,22 +48,20 @@ async function transcribeAudio(req, res) {
         language: 'pt',
         response_format: 'text',
       });
-      text = typeof result === 'string' ? result : result.text ?? '';
+      text = typeof result === 'string' ? result : (result.text ?? '');
     } else {
-      // ── Gemini fallback ───────────────────────────────────
+      // Gemini fallback
       engine = 'gemini-1.5-flash';
       const audioData = fs.readFileSync(filePath);
       const base64Audio = audioData.toString('base64');
       const mimeType = req.file.mimetype || 'audio/webm';
 
       const geminiResult = await geminiModel.generateContent([
-        {
-          inlineData: { mimeType, data: base64Audio },
-        },
+        { inlineData: { mimeType, data: base64Audio } },
         {
           text:
-            'Transcreva exatamente o que está sendo falado neste áudio em português. ' +
-            'Inclua apenas o texto transcrito, sem comentários adicionais.',
+            'Transcribe exactly what is being said in this audio in Portuguese. ' +
+            'Include only the transcribed text, no additional comments.',
         },
       ]);
       text = geminiResult.response.text().trim();
@@ -76,100 +69,92 @@ async function transcribeAudio(req, res) {
 
     res.json({ text, engine });
   } catch (error) {
-    console.error(`Erro na transcrição (${openai ? 'Whisper' : 'Gemini'}):`, error);
-    res.status(500).json({ error: `Erro ao transcrever: ${error.message}` });
+    console.error(`Transcription error (${openai ? 'Whisper' : 'Gemini'}):`, error);
+    res.status(500).json({ error: `Transcription failed: ${error.message}` });
   } finally {
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// POST /api/transcricao/salvar
-// ─────────────────────────────────────────────────────────────
-async function saveTranscricao(req, res) {
-  const { titulo, conteudo, pacienteNome, duracaoSegundos } = req.body;
+// POST /api/transcription/save
+async function saveTranscription(req, res) {
+  const { title, content, patientName, durationSeconds } = req.body;
 
-  if (!conteudo || !conteudo.trim()) {
-    return res.status(400).json({ error: 'O conteúdo da transcrição é obrigatório.' });
+  if (!content || !content.trim()) {
+    return res.status(400).json({ error: 'Transcription content is required.' });
   }
 
   try {
-    const transcricao = await Transcricao.create({
+    const record = await Transcription.create({
       userId: req.userId,
-      titulo: titulo?.trim() || 'Consulta sem título',
-      conteudo: conteudo.trim(),
-      pacienteNome: pacienteNome?.trim() || null,
-      duracaoSegundos: duracaoSegundos || 0,
+      title: title?.trim() || 'Untitled consultation',
+      content: content.trim(),
+      patientName: patientName?.trim() || null,
+      durationSeconds: durationSeconds || 0,
     });
 
-    res.status(201).json(transcricao);
+    res.status(201).json(record);
   } catch (error) {
-    console.error('Erro ao salvar transcrição:', error);
-    res.status(500).json({ error: 'Erro ao salvar transcrição.' });
+    console.error('Failed to save transcription:', error);
+    res.status(500).json({ error: 'Failed to save transcription.' });
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// GET /api/transcricao/listar
-// ─────────────────────────────────────────────────────────────
-async function listTranscricoes(req, res) {
+// GET /api/transcription/list
+async function listTranscriptions(req, res) {
   try {
-    const transcricoes = await Transcricao.findAll({
+    const records = await Transcription.findAll({
       where: { userId: req.userId },
       order: [['created_at', 'DESC']],
-      attributes: ['id', 'titulo', 'pacienteNome', 'duracaoSegundos', 'createdAt'],
+      attributes: ['id', 'title', 'patientName', 'durationSeconds', 'createdAt'],
     });
-    res.json(transcricoes);
+    res.json(records);
   } catch (error) {
-    console.error('Erro ao listar transcrições:', error);
-    res.status(500).json({ error: 'Erro ao listar transcrições.' });
+    console.error('Failed to list transcriptions:', error);
+    res.status(500).json({ error: 'Failed to list transcriptions.' });
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// GET /api/transcricao/:id
-// ─────────────────────────────────────────────────────────────
-async function getTranscricao(req, res) {
+// GET /api/transcription/:id
+async function getTranscription(req, res) {
   try {
-    const transcricao = await Transcricao.findOne({
+    const record = await Transcription.findOne({
       where: { id: req.params.id, userId: req.userId },
     });
 
-    if (!transcricao) {
-      return res.status(404).json({ error: 'Transcrição não encontrada.' });
+    if (!record) {
+      return res.status(404).json({ error: 'Transcription not found.' });
     }
 
-    res.json(transcricao);
+    res.json(record);
   } catch (error) {
-    console.error('Erro ao buscar transcrição:', error);
-    res.status(500).json({ error: 'Erro ao buscar transcrição.' });
+    console.error('Failed to get transcription:', error);
+    res.status(500).json({ error: 'Failed to get transcription.' });
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// DELETE /api/transcricao/:id
-// ─────────────────────────────────────────────────────────────
-async function deleteTranscricao(req, res) {
+// DELETE /api/transcription/:id
+async function deleteTranscription(req, res) {
   try {
-    const deleted = await Transcricao.destroy({
+    const deleted = await Transcription.destroy({
       where: { id: req.params.id, userId: req.userId },
     });
 
     if (!deleted) {
-      return res.status(404).json({ error: 'Transcrição não encontrada.' });
+      return res.status(404).json({ error: 'Transcription not found.' });
     }
 
-    res.json({ message: 'Transcrição excluída com sucesso.' });
+    res.json({ message: 'Transcription deleted successfully.' });
   } catch (error) {
-    console.error('Erro ao excluir transcrição:', error);
-    res.status(500).json({ error: 'Erro ao excluir transcrição.' });
+    console.error('Failed to delete transcription:', error);
+    res.status(500).json({ error: 'Failed to delete transcription.' });
   }
 }
 
 module.exports = {
   transcribeAudio,
-  saveTranscricao,
-  listTranscricoes,
-  getTranscricao,
-  deleteTranscricao,
+  saveTranscription,
+  listTranscriptions,
+  getTranscription,
+  deleteTranscription,
 };

@@ -2,11 +2,11 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
 import {
   transcribeAudioChunk,
-  saveTranscricao,
-  listTranscricoes,
-  getTranscricao,
-  deleteTranscricao,
-  TranscricaoSummary,
+  saveTranscription,
+  fetchTranscriptions,
+  fetchTranscriptionById,
+  deleteTranscription,
+  TranscriptionSummary,
 } from '../services/transcriptionService';
 import {
   Mic,
@@ -92,7 +92,7 @@ const CHUNK_INTERVAL_MS = 60_000; // 60 s
 interface SaveDialogProps {
   fullText: string;
   durationSeconds: number;
-  onSave: (titulo: string, pacienteNome: string) => Promise<void>;
+  onSave: (title: string, patientName: string) => Promise<void>;
   onClose: () => void;
 }
 
@@ -102,8 +102,8 @@ const SaveDialog: React.FC<SaveDialogProps> = ({
   onSave,
   onClose,
 }) => {
-  const [titulo, setTitulo] = useState('');
-  const [pacienteNome, setPacienteNome] = useState('');
+  const [title, setTitle] = useState('');
+  const [patientName, setPatientName] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -111,7 +111,7 @@ const SaveDialog: React.FC<SaveDialogProps> = ({
     setSaving(true);
     setError('');
     try {
-      await onSave(titulo, pacienteNome);
+      await onSave(title, patientName);
       onClose();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erro ao salvar.');
@@ -137,8 +137,8 @@ const SaveDialog: React.FC<SaveDialogProps> = ({
             </label>
             <input
               type="text"
-              value={titulo}
-              onChange={(e) => setTitulo(e.target.value)}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
               placeholder="Ex: Consulta de rotina — Dr. Silva"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
             />
@@ -149,8 +149,8 @@ const SaveDialog: React.FC<SaveDialogProps> = ({
             </label>
             <input
               type="text"
-              value={pacienteNome}
-              onChange={(e) => setPacienteNome(e.target.value)}
+              value={patientName}
+              onChange={(e) => setPatientName(e.target.value)}
               placeholder="Ex: João da Silva"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
             />
@@ -192,7 +192,7 @@ const SaveDialog: React.FC<SaveDialogProps> = ({
 // Aba Histórico
 // ─────────────────────────────────────────────────────────────
 const HistoryTab: React.FC = () => {
-  const [transcricoes, setTranscricoes] = useState<TranscricaoSummary[]>([]);
+  const [transcricoes, setTranscricoes] = useState<TranscriptionSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
@@ -204,7 +204,7 @@ const HistoryTab: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const data = await listTranscricoes();
+      const data = await fetchTranscriptions();
       setTranscricoes(data);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar histórico.');
@@ -226,8 +226,8 @@ const HistoryTab: React.FC = () => {
     setSelected(id);
     setLoadingContent(true);
     try {
-      const detail = await getTranscricao(id);
-      setSelectedContent(detail.conteudo);
+      const detail = await fetchTranscriptionById(id);
+      setSelectedContent(detail.content);
     } catch {
       setSelectedContent('Erro ao carregar conteúdo.');
     } finally {
@@ -238,7 +238,7 @@ const HistoryTab: React.FC = () => {
   const handleDelete = async (id: string) => {
     if (!confirm('Excluir esta transcrição?')) return;
     try {
-      await deleteTranscricao(id);
+      await deleteTranscription(id);
       setTranscricoes((prev) => prev.filter((t) => t.id !== id));
       if (selected === id) {
         setSelected(null);
@@ -263,7 +263,7 @@ const HistoryTab: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${t?.titulo ?? 'transcricao'}.txt`;
+    a.download = `${t?.title ?? 'transcription'}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -313,17 +313,17 @@ const HistoryTab: React.FC = () => {
               onClick={() => handleSelect(t.id)}
             >
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-gray-800 text-sm truncate">{t.titulo}</p>
-                {t.pacienteNome && (
+                <p className="font-medium text-gray-800 text-sm truncate">{t.title}</p>
+                {t.patientName && (
                   <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
                     <User className="w-3 h-3" />
-                    {t.pacienteNome}
+                    {t.patientName}
                   </p>
                 )}
                 <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
                   <span className="flex items-center gap-1">
                     <Clock className="w-3 h-3" />
-                    {formatTime(t.duracaoSegundos)}
+                    {formatTime(t.durationSeconds)}
                   </span>
                   <span>{formatDate(t.createdAt)}</span>
                 </div>
@@ -360,7 +360,7 @@ const HistoryTab: React.FC = () => {
           <>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
               <p className="text-sm font-medium text-gray-700 truncate">
-                {selectedItem?.titulo}
+                {selectedItem?.title}
               </p>
               <div className="flex gap-1">
                 <button
@@ -622,12 +622,12 @@ const Transcription: React.FC = () => {
     setSavedSuccess(false);
   };
 
-  const handleSave = async (titulo: string, pacienteNome: string) => {
-    await saveTranscricao({
-      titulo,
-      conteudo: fullText,
-      pacienteNome: pacienteNome || undefined,
-      duracaoSegundos: recordingTime,
+  const handleSave = async (title: string, patientName: string) => {
+    await saveTranscription({
+      title,
+      content: fullText,
+      patientName: patientName || undefined,
+      durationSeconds: recordingTime,
     });
     setSavedSuccess(true);
   };

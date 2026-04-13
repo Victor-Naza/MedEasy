@@ -1,13 +1,13 @@
-const API_BASE = 'http://localhost:5000/api/transcricao';
+const API_BASE = 'http://localhost:5000/api/transcription';
 const TOKEN_KEY = 'medicalToken';
 
-function authHeaders(): Record<string, string> {
+function getAuthHeaders(): Record<string, string> {
   const token = sessionStorage.getItem(TOKEN_KEY);
-  if (!token) throw new Error('Usuário não autenticado.');
+  if (!token) throw new Error('User not authenticated.');
   return { Authorization: `Bearer ${token}` };
 }
 
-// ── Transcrição de áudio ─────────────────────────────────────
+// Audio transcription
 
 export interface TranscriptionChunkResult {
   text: string;
@@ -18,78 +18,78 @@ export async function transcribeAudioChunk(
   audioBlob: Blob
 ): Promise<TranscriptionChunkResult> {
   const formData = new FormData();
-  formData.append('audio', audioBlob, 'consulta.webm');
+  formData.append('audio', audioBlob, 'consultation.webm');
 
-  const response = await fetch(`${API_BASE}/transcrever`, {
+  const response = await fetch(`${API_BASE}/transcribe`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: getAuthHeaders(),
     body: formData,
   });
 
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Erro ao transcrever o áudio.');
+  if (!response.ok) throw new Error(data.error || 'Failed to transcribe audio.');
   return data as TranscriptionChunkResult;
 }
 
-// ── CRUD de transcrições salvas ──────────────────────────────
+// Saved transcriptions CRUD
 
-export interface TranscricaoSummary {
+export interface TranscriptionSummary {
   id: string;
-  titulo: string;
-  pacienteNome: string | null;
-  duracaoSegundos: number;
+  title: string;
+  patientName: string | null;
+  durationSeconds: number;
   createdAt: string;
 }
 
-export interface TranscricaoDetail extends TranscricaoSummary {
-  conteudo: string;
+export interface TranscriptionDetail extends TranscriptionSummary {
+  content: string;
 }
 
-export async function saveTranscricao(payload: {
-  titulo: string;
-  conteudo: string;
-  pacienteNome?: string;
-  duracaoSegundos?: number;
-}): Promise<TranscricaoDetail> {
-  const response = await fetch(`${API_BASE}/salvar`, {
+export async function saveTranscription(payload: {
+  title: string;
+  content: string;
+  patientName?: string;
+  durationSeconds?: number;
+}): Promise<TranscriptionDetail> {
+  const response = await fetch(`${API_BASE}/save`, {
     method: 'POST',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
 
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Erro ao salvar transcrição.');
-  return data as TranscricaoDetail;
+  if (!response.ok) throw new Error(data.error || 'Failed to save transcription.');
+  return data as TranscriptionDetail;
 }
 
-export async function listTranscricoes(): Promise<TranscricaoSummary[]> {
-  const response = await fetch(`${API_BASE}/listar`, {
-    headers: authHeaders(),
+export async function fetchTranscriptions(): Promise<TranscriptionSummary[]> {
+  const response = await fetch(`${API_BASE}/list`, {
+    headers: getAuthHeaders(),
   });
 
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Erro ao listar transcrições.');
-  return data as TranscricaoSummary[];
+  if (!response.ok) throw new Error(data.error || 'Failed to fetch transcriptions.');
+  return data as TranscriptionSummary[];
 }
 
-export async function getTranscricao(id: string): Promise<TranscricaoDetail> {
+export async function fetchTranscriptionById(id: string): Promise<TranscriptionDetail> {
   const response = await fetch(`${API_BASE}/${id}`, {
-    headers: authHeaders(),
+    headers: getAuthHeaders(),
   });
 
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Erro ao buscar transcrição.');
-  return data as TranscricaoDetail;
+  if (!response.ok) throw new Error(data.error || 'Failed to fetch transcription.');
+  return data as TranscriptionDetail;
 }
 
-export async function deleteTranscricao(id: string): Promise<void> {
+export async function deleteTranscription(id: string): Promise<void> {
   const response = await fetch(`${API_BASE}/${id}`, {
     method: 'DELETE',
-    headers: authHeaders(),
+    headers: getAuthHeaders(),
   });
 
   if (!response.ok) {
     const data = await response.json();
-    throw new Error(data.error || 'Erro ao excluir transcrição.');
+    throw new Error(data.error || 'Failed to delete transcription.');
   }
 }

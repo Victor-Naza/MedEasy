@@ -38,6 +38,7 @@ interface TranscriptionBlock {
   timestampStart: number;
   status: 'transcribing' | 'done' | 'error';
   error?: string;
+  speaker?: 'médico' | 'paciente';
 }
 
 type RecordingStatus = 'idle' | 'recording' | 'stopping';
@@ -427,6 +428,12 @@ const Transcription: React.FC = () => {
   const chunkRotationRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const transcriptionEndRef = useRef<HTMLDivElement | null>(null);
   const isRecordingRef = useRef(false);
+  // Mic stream (médico) — usado apenas no modo meet
+  const micRecorderRef = useRef<MediaRecorder | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const micChunksRef = useRef<Blob[]>([]);
+  const micChunkStartRef = useRef(0);
+  const micChunkRotationRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     transcriptionEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -434,12 +441,12 @@ const Transcription: React.FC = () => {
 
   // ── Chunk helpers ──────────────────────────────────────────
 
-  const sendChunk = useCallback(async (blob: Blob, index: number, chunkStart: number) => {
+  const sendChunk = useCallback(async (blob: Blob, index: number, chunkStart: number, speaker?: 'médico' | 'paciente') => {
     if (blob.size === 0) return;
 
     setBlocks((prev) => [
       ...prev,
-      { index, text: '', timestampStart: chunkStart, status: 'transcribing' },
+      { index, text: '', timestampStart: chunkStart, status: 'transcribing', speaker },
     ]);
 
     try {
@@ -457,17 +464,40 @@ const Transcription: React.FC = () => {
     }
   }, []);
 
+  // Cria uma função de rotação de chunk para um stream específico
+  const buildRotator = useCallback(
+    (
+      localChunks: React.MutableRefObject<Blob[]>,
+      localChunkStart: React.MutableRefObject<number>,
+      speaker?: 'médico' | 'paciente'
+    ) =>
+      () => {
+        const currentChunks = [...localChunks.current];
+        const currentIndex = chunkIndexRef.current;
+        const currentChunkStart = Math.floor(
+          (localChunkStart.current - recordingStartRef.current) / 1000
+        );
+        localChunks.current = [];
+        chunkIndexRef.current += 1;
+        localChunkStart.current = Date.now();
+        if (currentChunks.length > 0) {
+          const mimeType = getSupportedMimeType();
+          const blob = new Blob(currentChunks, { type: mimeType });
+          sendChunk(blob, currentIndex, currentChunkStart, speaker);
+        }
+      },
+    [sendChunk]
+  );
+
   const rotateChunk = useCallback(() => {
     const currentChunks = [...chunksRef.current];
     const currentIndex = chunkIndexRef.current;
     const currentChunkStart = Math.floor(
       (chunkStartRef.current - recordingStartRef.current) / 1000
     );
-
     chunksRef.current = [];
     chunkIndexRef.current += 1;
     chunkStartRef.current = Date.now();
-
     if (currentChunks.length > 0) {
       const mimeType = getSupportedMimeType();
       const blob = new Blob(currentChunks, { type: mimeType });
@@ -480,65 +510,99 @@ const Transcription: React.FC = () => {
   const startRecording = async () => {
     setError('');
     try {
-      let stream: MediaStream;
+      const mimeType = getSupportedMimeType();
 
+      // ── Modo Google Meet: captura display (paciente) + microfone (médico) ──
       if (captureMode === 'meet') {
         const displayStream = await navigator.mediaDevices.getDisplayMedia({
-          audio: {
-            echoCancellation: false,
-            noiseSuppression: false,
-            sampleRate: 44100,
-          },
+          audio: { echoCancellation: false, noiseSuppression: false, sampleRate: 44100 },
           video: true,
         });
-
         displayStream.getVideoTracks().forEach((t) => t.stop());
 
         if (displayStream.getAudioTracks().length === 0) {
           displayStream.getTracks().forEach((t) => t.stop());
-          setError(
-            'Nenhuma fonte de áudio foi capturada. Selecione a aba do Google Meet e marque "Compartilhar áudio da aba".'
-          );
+          setError('Nenhuma fonte de áudio foi capturada. Selecione a aba do Google Meet e marque "Compartilhar áudio da aba".');
           return;
         }
 
-        stream = displayStream;
-      } else {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      }
+        // Inicializa estado compartilhado
+        recordingStartRef.current = Date.now();
+        chunkIndexRef.current = 0;
+        isRecordingRef.current = true;
 
-      streamRef.current = stream;
-      chunksRef.current = [];
-      chunkIndexRef.current = 0;
-      chunkStartRef.current = Date.now();
-      recordingStartRef.current = Date.now();
-      isRecordingRef.current = true;
+        // ── Stream do Meet (paciente) ──
+        streamRef.current = displayStream;
+        chunksRef.current = [];
+        chunkStartRef.current = Date.now();
 
-      const mimeType = getSupportedMimeType();
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+        const rotateDisplay = buildRotator(chunksRef, chunkStartRef, 'paciente');
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
-          const totalSize = chunksRef.current.reduce((acc, b) => acc + b.size, 0);
-          if (totalSize >= MAX_CHUNK_BYTES) rotateChunk();
+        const displayRecorder = new MediaRecorder(displayStream, mimeType ? { mimeType } : undefined);
+        displayRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) {
+            chunksRef.current.push(e.data);
+            const total = chunksRef.current.reduce((acc, b) => acc + b.size, 0);
+            if (total >= MAX_CHUNK_BYTES) rotateDisplay();
+          }
+        };
+        displayRecorder.start(1000);
+        mediaRecorderRef.current = displayRecorder;
+        chunkRotationRef.current = setInterval(rotateDisplay, CHUNK_INTERVAL_MS);
+        displayStream.getTracks().forEach((t) => { t.onended = () => { if (isRecordingRef.current) stopRecording(); }; });
+
+        // ── Stream do microfone (médico) ──
+        try {
+          const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          micStreamRef.current = micStream;
+          micChunksRef.current = [];
+          micChunkStartRef.current = Date.now();
+
+          const rotateMic = buildRotator(micChunksRef, micChunkStartRef, 'médico');
+
+          const micRecorder = new MediaRecorder(micStream, mimeType ? { mimeType } : undefined);
+          micRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) {
+              micChunksRef.current.push(e.data);
+              const total = micChunksRef.current.reduce((acc, b) => acc + b.size, 0);
+              if (total >= MAX_CHUNK_BYTES) rotateMic();
+            }
+          };
+          micRecorder.start(1000);
+          micRecorderRef.current = micRecorder;
+          micChunkRotationRef.current = setInterval(rotateMic, CHUNK_INTERVAL_MS);
+          micStream.getTracks().forEach((t) => { t.onended = () => { if (isRecordingRef.current) stopRecording(); }; });
+        } catch {
+          // Microfone indisponível — continua só com áudio do Meet
         }
-      };
 
-      recorder.start(1000);
-      mediaRecorderRef.current = recorder;
+      // ── Modo microfone local ──
+      } else {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        streamRef.current = stream;
+        chunksRef.current = [];
+        chunkIndexRef.current = 0;
+        chunkStartRef.current = Date.now();
+        recordingStartRef.current = Date.now();
+        isRecordingRef.current = true;
+
+        const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) {
+            chunksRef.current.push(e.data);
+            const total = chunksRef.current.reduce((acc, b) => acc + b.size, 0);
+            if (total >= MAX_CHUNK_BYTES) rotateChunk();
+          }
+        };
+        recorder.start(1000);
+        mediaRecorderRef.current = recorder;
+        chunkRotationRef.current = setInterval(rotateChunk, CHUNK_INTERVAL_MS);
+        stream.getTracks().forEach((t) => { t.onended = () => { if (isRecordingRef.current) stopRecording(); }; });
+      }
 
       timerRef.current = setInterval(() => {
         setRecordingTime(Math.floor((Date.now() - recordingStartRef.current) / 1000));
       }, 1000);
-
-      chunkRotationRef.current = setInterval(rotateChunk, CHUNK_INTERVAL_MS);
-
-      stream.getTracks().forEach((track) => {
-        track.onended = () => {
-          if (isRecordingRef.current) stopRecording();
-        };
-      });
 
       setStatus('recording');
     } catch (err: unknown) {
@@ -561,23 +625,40 @@ const Transcription: React.FC = () => {
 
     if (timerRef.current) clearInterval(timerRef.current);
     if (chunkRotationRef.current) clearInterval(chunkRotationRef.current);
+    if (micChunkRotationRef.current) clearInterval(micChunkRotationRef.current);
 
+    const mimeType = getSupportedMimeType();
+    const hasMic = !!micStreamRef.current;
+
+    // Chunk final do stream principal (Meet = paciente / mic local = sem label)
     const finalChunks = [...chunksRef.current];
     const finalIndex = chunkIndexRef.current;
-    const finalStart = Math.floor(
-      (chunkStartRef.current - recordingStartRef.current) / 1000
-    );
+    const finalStart = Math.floor((chunkStartRef.current - recordingStartRef.current) / 1000);
     chunksRef.current = [];
-
+    chunkIndexRef.current += 1;
     if (finalChunks.length > 0) {
-      const mimeType = getSupportedMimeType();
       const blob = new Blob(finalChunks, { type: mimeType });
-      sendChunk(blob, finalIndex, finalStart);
+      sendChunk(blob, finalIndex, finalStart, hasMic ? 'paciente' : undefined);
     }
 
-    if (mediaRecorderRef.current?.state !== 'inactive') {
-      mediaRecorderRef.current?.stop();
+    // Chunk final do microfone (médico) — somente no modo meet
+    if (hasMic) {
+      const micFinalChunks = [...micChunksRef.current];
+      const micFinalIndex = chunkIndexRef.current;
+      const micFinalStart = Math.floor((micChunkStartRef.current - recordingStartRef.current) / 1000);
+      micChunksRef.current = [];
+      chunkIndexRef.current += 1;
+      if (micFinalChunks.length > 0) {
+        const blob = new Blob(micFinalChunks, { type: mimeType });
+        sendChunk(blob, micFinalIndex, micFinalStart, 'médico');
+      }
+      if (micRecorderRef.current?.state !== 'inactive') micRecorderRef.current?.stop();
+      micStreamRef.current?.getTracks().forEach((t) => t.stop());
+      micStreamRef.current = null;
+      micRecorderRef.current = null;
     }
+
+    if (mediaRecorderRef.current?.state !== 'inactive') mediaRecorderRef.current?.stop();
     streamRef.current?.getTracks().forEach((t) => t.stop());
     setStatus('idle');
   }, [sendChunk]);
@@ -586,7 +667,9 @@ const Transcription: React.FC = () => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (chunkRotationRef.current) clearInterval(chunkRotationRef.current);
+      if (micChunkRotationRef.current) clearInterval(micChunkRotationRef.current);
       streamRef.current?.getTracks().forEach((t) => t.stop());
+      micStreamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, []);
 
@@ -594,7 +677,11 @@ const Transcription: React.FC = () => {
 
   const fullText = blocks
     .filter((b) => b.status === 'done')
-    .map((b) => `${formatTimestamp(b.timestampStart)} ${b.text}`)
+    .sort((a, b) => a.timestampStart - b.timestampStart)
+    .map((b) => {
+      const label = b.speaker === 'médico' ? 'Médico: ' : b.speaker === 'paciente' ? 'Paciente: ' : '';
+      return `${formatTimestamp(b.timestampStart)} ${label}${b.text}`;
+    })
     .join('\n\n');
 
   const copyToClipboard = async () => {
@@ -885,12 +972,21 @@ const Transcription: React.FC = () => {
 
                 {blocks.length > 0 && (
                   <div className="space-y-4">
-                    {blocks.map((block) => (
+                    {[...blocks].sort((a, b) => a.timestampStart - b.timestampStart).map((block) => (
                       <div key={block.index} className="flex gap-3">
                         <span className="font-mono text-xs text-gray-400 mt-1 flex-shrink-0 w-14">
                           {formatTimestamp(block.timestampStart)}
                         </span>
                         <div className="flex-1">
+                          {block.speaker && (
+                            <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full mb-1 ${
+                              block.speaker === 'médico'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-green-100 text-green-700'
+                            }`}>
+                              {block.speaker === 'médico' ? '🩺 Médico' : '👤 Paciente'}
+                            </span>
+                          )}
                           {block.status === 'transcribing' && (
                             <div className="flex items-center gap-2 text-sm text-blue-500">
                               <Loader className="w-3 h-3 animate-spin" />

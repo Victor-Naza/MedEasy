@@ -9,6 +9,7 @@ const authRoutes = require('./src/routes/authRoutes');
 const medicamentoRoutes = require('./src/routes/medicamentoRoutes');
 const adminRoutes = require('./src/routes/adminRoutes');
 const transcriptionRoutes = require('./src/routes/transcriptionRoutes');
+const prescricaoRoutes = require('./src/routes/prescricaoRoutes');
 const { sequelize } = require('./src/services/db');
 
 console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'OK' : 'NOT FOUND');
@@ -24,6 +25,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/medicamentos', medicamentoRoutes);
 app.use('/api/medicamentos/admin', adminRoutes);
 app.use('/api/transcription', transcriptionRoutes);
+app.use('/api/prescricoes', prescricaoRoutes);
 
 // AI suggestions: Gemini (primary), OpenAI (fallback)
 let geminiSuggestionModel = null;

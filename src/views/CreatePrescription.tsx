@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { FileText, Printer, Save, Wand2 } from 'lucide-react';
-import { getTreatmentSuggestion } from '../services/iaService';
+import { getTreatmentSuggestion, type MedicationSuggestion } from '../services/iaService';
+import { savePrescricao } from '../services/prescricaoService';
 
 const CreatePrescription: React.FC = () => {
   const { currentUser } = useAuth();
@@ -11,6 +12,7 @@ const CreatePrescription: React.FC = () => {
   const [symptoms, setSymptoms] = useState('');
   const [treatment, setTreatment] = useState('');
   const [iaSuggestion, setIaSuggestion] = useState('');
+  const [iaMedications, setIaMedications] = useState<MedicationSuggestion[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [savedPrescription, setSavedPrescription] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -23,8 +25,9 @@ const CreatePrescription: React.FC = () => {
     }
     setIsLoadingIA(true);
     try {
-      const suggestion = await getTreatmentSuggestion(symptoms);
-      setIaSuggestion(suggestion);
+      const result = await getTreatmentSuggestion(symptoms, patientAge);
+      setIaSuggestion(result.suggestion);
+      setIaMedications(result.medications);
     } catch (error) {
       console.error('Erro ao obter sugestão da IA:', error);
       alert('Erro ao obter sugestão da IA. Tente novamente.');
@@ -33,37 +36,30 @@ const CreatePrescription: React.FC = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!patientName || !patientAge || !symptoms || !treatment) {
-      return;
-    }
+    if (!patientName || !patientAge || !symptoms || !treatment) return;
+
     setIsSubmitting(true);
-    setTimeout(() => {
+    try {
+      await savePrescricao({
+        patient_name: patientName,
+        patient_age: patientAge,
+        symptoms,
+        treatment,
+        ia_suggestion: iaSuggestion || undefined,
+      });
+
       const date = new Date().toLocaleDateString('pt-BR');
-      const prescriptionText = `
-PRESCRIÇÃO MÉDICA
-
-Data: ${date}
-
-INFORMAÇÕES DO PACIENTE
-Nome: ${patientName}
-Idade: ${patientAge}
-
-SINTOMAS
-${symptoms}
-
-TRATAMENTO / PRESCRIÇÃO
-${treatment}
-
-INFORMAÇÕES DO MÉDICO
-Dr(a). ${currentUser?.name}
-      `.trim();
-      setSavedPrescription(prescriptionText);
+      setSavedPrescription(`PRESCRIÇÃO MÉDICA\n\nData: ${date}\n\nINFORMAÇÕES DO PACIENTE\nNome: ${patientName}\nIdade: ${patientAge}\n\nSINTOMAS\n${symptoms}\n\nTRATAMENTO / PRESCRIÇÃO\n${treatment}\n\nINFORMAÇÕES DO MÉDICO\nDr(a). ${currentUser?.name}`);
       setShowSuccess(true);
-      setIsSubmitting(false);
       setTimeout(() => setShowSuccess(false), 3000);
-    }, 800);
+    } catch (error) {
+      console.error('Erro ao salvar prescrição:', error);
+      alert('Erro ao salvar prescrição. Tente novamente.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handlePrint = () => {
@@ -126,6 +122,7 @@ Dr(a). ${currentUser?.name}
     setSymptoms('');
     setTreatment('');
     setIaSuggestion('');
+    setIaMedications([]);
     setSavedPrescription(null);
   };
 
@@ -250,6 +247,57 @@ Dr(a). ${currentUser?.name}
             >
               Gerar Sugestão IA
             </button>
+
+            {iaMedications.length > 0 && (
+              <div className="mt-4">
+                <p className="text-sm font-semibold text-gray-700 mb-2">
+                  Medicamentos disponíveis
+                </p>
+                <div className="flex flex-col gap-2">
+                  {iaMedications.map((med, i) => (
+                    <div
+                      key={i}
+                      className="rounded-md border-l-4 bg-white shadow-sm p-3 text-sm cursor-pointer hover:bg-purple-50 transition-colors"
+                      style={{ borderLeftColor: med.cor ?? '#7C3AED' }}
+                      title="Clique para adicionar ao tratamento"
+                      onClick={() => {
+                        const linha = `${med.nome}${med.concentracao ? ' ' + med.concentracao : ''}${med.apresentacao ? ' (' + med.apresentacao + ')' : ''}${med.posologia ? ': ' + med.posologia : ''}`;
+                        setTreatment(prev => prev ? `${prev}\n${linha}` : linha);
+                      }}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="font-semibold text-gray-800">{med.nome}</span>
+                        {med.disponivel ? (
+                          <span className="shrink-0 text-xs bg-green-100 text-green-700 rounded-full px-2 py-0.5">
+                            Disponível
+                          </span>
+                        ) : (
+                          <span className="shrink-0 text-xs bg-yellow-100 text-yellow-700 rounded-full px-2 py-0.5">
+                            Verificar
+                          </span>
+                        )}
+                      </div>
+                      {(med.concentracao || med.apresentacao) && (
+                        <p className="text-gray-500 mt-0.5">
+                          {[med.concentracao, med.apresentacao].filter(Boolean).join(' – ')}
+                        </p>
+                      )}
+                      {med.posologia && (
+                        <p className="text-gray-700 mt-1">
+                          <span className="font-medium">Posologia:</span> {med.posologia}
+                        </p>
+                      )}
+                      {med.justificativa && (
+                        <p className="text-gray-500 mt-0.5 italic">{med.justificativa}</p>
+                      )}
+                      {med.categoria && (
+                        <p className="text-xs text-gray-400 mt-1">{med.categoria}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col flex-grow">

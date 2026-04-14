@@ -35,6 +35,22 @@ async function transcribeAudio(req, res) {
 
   const filePath = req.file.path;
 
+  // Whisper infere o formato pelo nome do arquivo — renomeia com a extensão correta
+  const mimeToExt = {
+    'audio/webm': 'webm',
+    'audio/ogg': 'ogg',
+    'audio/wav': 'wav',
+    'audio/wave': 'wav',
+    'audio/mp4': 'mp4',
+    'audio/mpeg': 'mp3',
+    'audio/mp3': 'mp3',
+    'audio/flac': 'flac',
+  };
+  const mime = (req.file.mimetype || 'audio/webm').split(';')[0].toLowerCase();
+  const ext = mimeToExt[mime] || 'webm';
+  const namedPath = `${filePath}.${ext}`;
+  fs.renameSync(filePath, namedPath);
+
   try {
     let text = '';
     let engine = '';
@@ -43,7 +59,7 @@ async function transcribeAudio(req, res) {
       // Whisper (OpenAI)
       engine = 'whisper-1';
       const result = await openai.audio.transcriptions.create({
-        file: fs.createReadStream(filePath),
+        file: fs.createReadStream(namedPath),
         model: 'whisper-1',
         language: 'pt',
         response_format: 'text',
@@ -52,7 +68,7 @@ async function transcribeAudio(req, res) {
     } else {
       // Gemini fallback
       engine = 'gemini-1.5-flash';
-      const audioData = fs.readFileSync(filePath);
+      const audioData = fs.readFileSync(namedPath);
       const base64Audio = audioData.toString('base64');
       const mimeType = req.file.mimetype || 'audio/webm';
 
@@ -72,7 +88,7 @@ async function transcribeAudio(req, res) {
     console.error(`Transcription error (${openai ? 'Whisper' : 'Gemini'}):`, error);
     res.status(500).json({ error: `Transcription failed: ${error.message}` });
   } finally {
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    if (fs.existsSync(namedPath)) fs.unlinkSync(namedPath);
   }
 }
 

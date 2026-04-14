@@ -2,7 +2,7 @@
 
 ## Descrição do Projeto
 
-**MedEasy** é um sistema completo de prescrição médica que integra Inteligência Artificial para auxiliar médicos na criação de prescrições, cálculo de dosagens e gerenciamento de medicamentos. O sistema oferece sugestões de tratamento baseadas em sintomas através da API do Google Gemini.
+**MedEasy** é um sistema completo de prescrição médica que integra Inteligência Artificial para auxiliar médicos na criação de prescrições, transcrição de consultas e gerenciamento de medicamentos. O sistema oferece sugestões de tratamento baseadas em sintomas consultando a **REMUME 2025-2026** (Relação Municipal de Medicamentos Essenciais de Fortaleza) através do **Google Gemini 2.0 Flash** (primário) e **GPT-4o-mini da OpenAI** (fallback), com ~454 medicamentos organizados em 21 categorias ATC.
 
 ---
 
@@ -24,12 +24,22 @@
 - **Node.js** - Ambiente de execução JavaScript
 - **Express 4.17.1 / 5.1.0** - Framework web para Node.js
 - **Sequelize 6.37.7** - ORM para Node.js
-- **SQLite3 6.x** - Banco local em arquivo para desenvolvimento
-- **MySQL2 3.14.1** - Driver MySQL para Node.js
+- **pg / pg-hstore** - Driver PostgreSQL para Node.js
+- **MySQL2 3.14.1** - Driver MySQL para Node.js (compatibilidade)
 - **JWT (jsonwebtoken 9.0.2)** - Autenticação por token
 - **Bcrypt/Bcryptjs** - Criptografia de senhas
+- **Multer** - Upload de arquivos de áudio para transcrição
 - **CORS 2.8.5** - Middleware para habilitar CORS
 - **Google Generative AI** - Integração com IA do Google (Gemini)
+- **OpenAI** - Sugestões de tratamento via GPT-4o-mini + transcrição via Whisper
+
+### **Banco de Dados e Serviços Externos**
+
+- **Supabase (PostgreSQL)** - Banco de dados principal com Row Level Security (RLS)
+- **Google Gemini 2.0 Flash** - Sugestões de tratamento (primário)
+- **OpenAI GPT-4o-mini** - Sugestões de tratamento (fallback)
+- **OpenAI Whisper** - Transcrição de áudio (primário)
+- **Google Gemini 1.5 Flash** - Transcrição de áudio (fallback)
 
 ### **Outras Tecnologias**
 
@@ -54,18 +64,24 @@ Backend (server/)
 │   ├── medicamento.js       • Relacionamentos entre tabelas
 │   ├── categoria.js         • Validações de dados
 │   ├── posologia.js
+│   ├── prescricao.js        • Prescrições salvas
+│   ├── transcription.js     • Transcrições de consultas
 │   └── associations.js
 │
 ├── controllers/     → Camada de Lógica de Negócio
-│   ├── authController.js        • Processamento de requisições
-│   ├── medicamentoController.js • Validações de negócio
-│   └── adminController.js       • Formatação de respostas
+│   ├── authController.js            • Processamento de requisições
+│   ├── medicamentoController.js     • Validações de negócio
+│   ├── adminController.js           • Formatação de respostas
+│   ├── prescricaoController.js      • Salvar/listar prescrições
+│   └── transcriptionController.js   • Transcrição com Whisper/Gemini
 │
 ├── routes/          → Camada de Roteamento
-│   ├── authRoutes.js        • Definição de endpoints
-│   ├── medicamentoRoutes.js • Mapeamento URL → Controller
-│   ├── adminRoutes.js       • Aplicação de middlewares
-│   └── iaRoute.js
+│   ├── authRoutes.js            • Definição de endpoints
+│   ├── medicamentoRoutes.js     • Mapeamento URL → Controller
+│   ├── adminRoutes.js           • Aplicação de middlewares
+│   ├── iaRoute.js               • Sugestão de tratamento via IA
+│   ├── prescricaoRoutes.js      • Prescrições
+│   └── transcriptionRoutes.js   • Upload e transcrição de áudio
 │
 ├── services/        → Camada de Serviços
 │   └── db.js                • Lógica reutilizável
@@ -94,11 +110,12 @@ O frontend utiliza uma **arquitetura baseada em componentes** com organização 
 ```
 Frontend (src/)
 ├── views/           → Páginas/Telas (equivalente a "Views")
-│   ├── Login.tsx           • Componentes de página completa
-│   ├── Register.tsx        • Roteamento principal
-│   ├── Dashboard.tsx       • Composição de componentes
-│   ├── CreatePrescription.tsx
-│   └── Medications.tsx
+│   ├── Login.tsx
+│   ├── Register.tsx
+│   ├── Dashboard.tsx
+│   ├── CreatePrescription.tsx   • Prescrição com sugestão IA
+│   ├── Medications.tsx
+│   └── Transcription.tsx        • Transcrição com diarização
 │
 ├── components/      → Componentes Reutilizáveis
 │   ├── Layout.tsx          • UI components compartilhados
@@ -111,20 +128,21 @@ Frontend (src/)
 │
 ├── controllers/     → Lógica de Controle (Frontend)
 │   ├── AuthController.ts       • Orquestração de ações
-│   ├── PrescriptionController.ts • Validações client-side
+│   ├── PrescriptionController.ts
 │   └── DosageController.ts
 │
 ├── services/        → Comunicação com Backend
-│   ├── iaService.ts        • Chamadas à API
-│   └── medicamentoService.ts • Serialização de dados
+│   ├── iaService.ts            • Chamadas à API de IA
+│   ├── prescricaoService.ts    • Salvar prescrições
+│   └── medicamentoService.ts
 │
 ├── models/          → Definições de Tipos (TypeScript)
-│   ├── User.ts             • Interfaces e tipos
-│   ├── Prescription.ts     • Contratos de dados
-│   └── DosageCalculation.ts • Não são models de BD
+│   ├── User.ts
+│   ├── Prescription.ts
+│   └── DosageCalculation.ts
 │
 └── types/           → Types e Enums Globais
-    └── index.ts            • Definições TypeScript
+    └── index.ts
 ```
 
 **Fluxo de Dados no Frontend:**
@@ -137,6 +155,7 @@ User Interface (Views) → Controllers → Services → Backend API
 
 ### **Diferenças do MVC Tradicional**
 
+
 | Aspecto         | MVC Tradicional        | MedEasy                     |
 | --------------- | ---------------------- | --------------------------- |
 | **View**        | Backend renderiza HTML | Frontend React renderiza UI |
@@ -144,6 +163,7 @@ User Interface (Views) → Controllers → Services → Backend API
 | **Estado**      | Sessão no servidor     | Context API + JWT           |
 | **Separação**   | Monolítico             | Frontend/Backend separados  |
 | **Roteamento**  | Server-side            | Client-side (React Router)  |
+
 
 ### **Padrões Arquiteturais Utilizados**
 
@@ -171,7 +191,7 @@ User Interface (Views) → Controllers → Services → Backend API
 ### **Autenticação e Autorização**
 
 - Sistema de login e registro de usuários
-- Autenticação via JWT (JSON Web Tokens)
+- Autenticação via JWT (JSON Web Tokens) armazenado em `sessionStorage`
 - Controle de acesso baseado em roles (médicos)
 - Validação de CRM para médicos
 - Rotas protegidas com middleware de autenticação
@@ -181,27 +201,36 @@ User Interface (Views) → Controllers → Services → Backend API
 - Criação de prescrições médicas personalizadas
 - Cadastro de informações do paciente (nome, idade)
 - Registro de sintomas observados
-- Sugestão automática de tratamento via IA
-- Histórico de prescrições por médico
-- Impressão de prescrições
+- Sugestão automática de tratamento via IA com base na REMUME
+- **Clique em um medicamento sugerido** para adicioná-lo automaticamente ao campo de tratamento
+- **Prescrições salvas no banco de dados** vinculadas ao médico logado
+- Impressão de prescrições em formato A4
 
 ### **Integração com Inteligência Artificial**
 
-- Sugestões de tratamento baseadas em sintomas usando **Google Gemini 2.0 Flash**
-- Análise inteligente de sintomas
-- Recomendações de medicamentos e tratamentos
-- Assistência médica auxiliada por IA
+- Sugestões de tratamento baseadas em sintomas consultando a **REMUME 2025-2026**
+- Motor primário: **Google Gemini 2.0 Flash**
+- Motor de fallback: **GPT-4o-mini (OpenAI)** — ativado automaticamente se o Gemini não estiver disponível
+- A IA recebe a lista completa de medicamentos disponíveis e recomenda pelo menos 2 com base nos sintomas
+- Cada sugestão inclui: posologia, justificativa clínica, concentração, apresentação e categoria
+- Badge "Disponível" / "Verificar" por medicamento
 
-### **Gestão de Medicamentos**
+### **Catálogo REMUME 2025-2026**
 
-- Catálogo completo de medicamentos organizados por categorias
+- **~454 medicamentos** organizados em **21 categorias ATC**
+- Informações detalhadas: nome, concentração, apresentação, via de administração
+- Categorias com ícone e cor para fácil identificação
 - Busca de medicamentos por categoria e faixa etária
-- Informações detalhadas sobre medicamentos:
-  - Nome e princípio ativo
-  - Via de administração
-  - Concentração e apresentação
-  - Unidade de dosagem
-- Filtros por faixa etária do paciente
+
+### **Transcrição de Consultas**
+
+- Gravação de áudio diretamente no navegador via MediaRecorder API
+- Transcrição automática usando **OpenAI Whisper** (primário)
+- Fallback para **Google Gemini 1.5 Flash** caso o Whisper não esteja configurado
+- **Modo Google Meet com diarização de falantes:**
+  - `🩺 Médico` — capturado pelo microfone via `getUserMedia`
+  - `👤 Paciente` — capturado pelo áudio da tela via `getDisplayMedia`
+- Transcrições salvas no banco vinculadas ao médico
 
 ### **Cálculo de Dosagens**
 
@@ -235,80 +264,93 @@ User Interface (Views) → Controllers → Services → Backend API
 MedEasy/
 │
 ├── src/                          # Frontend (React + TypeScript)
-│   ├── components/               # Componentes React reutilizáveis
-│   │   ├── Layout.tsx           # Layout principal da aplicação
-│   │   └── ProtectedRoute.tsx   # Componente de rota protegida
+│   ├── components/
+│   │   ├── Layout.tsx
+│   │   └── ProtectedRoute.tsx
 │   │
-│   ├── contexts/                 # Context API do React
-│   │   └── AuthContext.tsx      # Contexto de autenticação
+│   ├── contexts/
+│   │   └── AuthContext.tsx
 │   │
-│   ├── controllers/              # Controllers do frontend
-│   │   ├── AuthController.ts    # Lógica de autenticação
+│   ├── controllers/
+│   │   ├── AuthController.ts
 │   │   ├── PrescriptionController.ts
 │   │   └── DosageController.ts
 │   │
-│   ├── middlewares/              # Middlewares do frontend
-│   │   └── authMiddleware.ts    # Validação de autenticação
+│   ├── middlewares/
+│   │   └── authMiddleware.ts
 │   │
-│   ├── models/                   # Modelos de dados do frontend
+│   ├── models/
 │   │   ├── User.ts
 │   │   ├── Prescription.ts
 │   │   └── DosageCalculation.ts
 │   │
-│   ├── services/                 # Serviços de integração
-│   │   ├── iaService.ts         # Integração com IA
+│   ├── services/
+│   │   ├── iaService.ts          # Sugestão de tratamento via IA
+│   │   ├── prescricaoService.ts  # Salvar prescrições no banco
 │   │   └── medicamentoService.ts
 │   │
-│   ├── types/                    # Definições TypeScript
-│   │   └── index.ts             # Interfaces e enums
+│   ├── types/
+│   │   └── index.ts
 │   │
-│   ├── views/                    # Páginas da aplicação
-│   │   ├── Login.tsx            # Tela de login
-│   │   ├── Register.tsx         # Tela de registro
-│   │   ├── Dashboard.tsx        # Dashboard principal
-│   │   ├── CreatePrescription.tsx  # Criar prescrição
-│   │   └── Medications.tsx      # Listagem de medicamentos
+│   ├── views/
+│   │   ├── Login.tsx
+│   │   ├── Register.tsx
+│   │   ├── Dashboard.tsx
+│   │   ├── CreatePrescription.tsx
+│   │   ├── Medications.tsx
+│   │   └── Transcription.tsx     # Transcrição com diarização
 │   │
-│   ├── App.tsx                   # Componente raiz
-│   ├── main.tsx                  # Ponto de entrada
-│   └── index.css                 # Estilos globais
+│   ├── App.tsx
+│   ├── main.tsx
+│   └── index.css
 │
 ├── server/                       # Backend (Express + Sequelize)
 │   └── src/
-│       ├── controllers/          # Controllers do backend
-│       │   ├── authController.js        # Autenticação
-│       │   ├── medicamentoController.js # Medicamentos
-│       │   └── adminController.js       # Admin
+│       ├── controllers/
+│       │   ├── authController.js
+│       │   ├── medicamentoController.js
+│       │   ├── adminController.js
+│       │   ├── prescricaoController.js      # Salvar/listar prescrições
+│       │   └── transcriptionController.js   # Whisper + Gemini fallback
 │       │
-│       ├── middlewares/          # Middlewares do backend
+│       ├── middlewares/
 │       │   └── authMiddleware.js
 │       │
-│       ├── models/               # Modelos Sequelize (banco de dados)
+│       ├── models/
 │       │   ├── user.js
 │       │   ├── medicamento.js
 │       │   ├── categoria.js
 │       │   ├── posologia.js
-│       │   └── associations.js   # Associações entre models
+│       │   ├── prescricao.js
+│       │   ├── transcription.js
+│       │   └── associations.js
 │       │
-│       ├── routes/               # Rotas da API
+│       ├── routes/
 │       │   ├── authRoutes.js
 │       │   ├── medicamentoRoutes.js
 │       │   ├── adminRoutes.js
-│       │   └── iaRoute.js
+│       │   ├── iaRoute.js
+│       │   ├── prescricaoRoutes.js
+│       │   └── transcriptionRoutes.js
 │       │
-│       ├── services/             # Serviços do backend
-│       │   └── db.js            # Configuração do banco
+│       ├── services/
+│       │   └── db.js
 │       │
-│       └── server.js             # Servidor Express
+│       └── server.js
 │
-├── electron/                     # Configuração do Electron
+├── database/
+│   ├── remume_seed.sql           # ~454 medicamentos REMUME 2025-2026
+│   └── prescricoes_migration.sql # Tabela prescricoes + RLS
+│
+├── electron/
 │   └── main.js
 │
-├── index.html                    # HTML principal
-├── package.json                  # Dependências do frontend
-├── vite.config.ts               # Configuração do Vite
-├── tailwind.config.js           # Configuração do Tailwind
-├── tsconfig.json                # Configuração do TypeScript
+├── uploads/tmp/                  # Áudios temporários (deletados após transcrição)
+├── index.html
+├── package.json
+├── vite.config.ts
+├── tailwind.config.js
+├── tsconfig.json
 └── .gitignore
 ```
 
@@ -320,12 +362,12 @@ MedEasy/
 
 ```typescript
 {
-  id: string
+  id: number
   name: string
   email: string
-  password: string (hash)
+  password: string (hash bcrypt)
   role: 'médico'
-  crm?: string (Registro médico)
+  crm?: string
 }
 ```
 
@@ -333,16 +375,14 @@ MedEasy/
 
 ```typescript
 {
-  id: string;
-  patientId: string;
-  patientName: string;
-  patientAge: number;
-  symptoms: string;
-  treatment: string;
-  date: string;
-  doctorId: string;
-  doctorName: string;
-  doctorCrm: string;
+  id: string (UUID)
+  user_id: number
+  patient_name: string
+  patient_age: string
+  symptoms: string
+  treatment: string
+  ia_suggestion?: string
+  created_at: Date
 }
 ```
 
@@ -350,14 +390,13 @@ MedEasy/
 
 ```javascript
 {
-  id_medicamento: INTEGER;
-  nome: STRING;
-  principio_ativo: STRING;
-  via_administracao: STRING;
-  concentracao: STRING;
-  apresentacao: STRING;
-  unidade_dose: STRING;
-  id_categoria: INTEGER;
+  id_medicamento: INTEGER
+  nome: STRING
+  concentracao: STRING
+  apresentacao: STRING
+  via_administracao: STRING  // Oral | Parenteral | Tópica | Inalatória | ...
+  disponivel: BOOLEAN
+  id_categoria: INTEGER (FK → categorias)
 }
 ```
 
@@ -365,10 +404,10 @@ MedEasy/
 
 ```javascript
 {
-  id_categoria: INTEGER;
-  nome: STRING;
-  icone: STRING;
-  cor: STRING;
+  id_categoria: INTEGER
+  nome: STRING
+  icone: STRING  // nome do ícone Lucide
+  cor: STRING    // hex, ex: '#2196F3'
 }
 ```
 
@@ -376,29 +415,30 @@ MedEasy/
 
 ```javascript
 {
-  id_posologia: INTEGER;
-  dose_mg_kg_min: DECIMAL;
-  dose_mg_kg_max: DECIMAL;
-  frequencia_dia: INTEGER;
-  dose_max_mg_dia: DECIMAL;
-  formula_calculo: STRING;
-  observacoes: TEXT;
-  faixa_idade_min_meses: INTEGER;
-  faixa_idade_max_meses: INTEGER;
-  faixa_etaria: STRING;
+  id_posologia: INTEGER
+  dose_mg_kg_min: DECIMAL
+  dose_mg_kg_max: DECIMAL
+  frequencia_dia: INTEGER
+  dose_max_mg_dia: DECIMAL
+  formula_calculo: STRING
+  observacoes: TEXT
+  faixa_idade_min_meses: INTEGER
+  faixa_idade_max_meses: INTEGER
+  faixa_etaria: STRING
 }
 ```
 
-### **DosageCalculation (Cálculo de Dosagem)**
+### **Transcription (Transcrição)**
 
-```typescript
+```javascript
 {
-  id: string;
-  medicationName: string;
-  calculation: string;
-  result: string;
-  date: string;
-  userId: string;
+  id: UUID
+  user_id: INTEGER (FK → users)
+  title: STRING
+  content: TEXT
+  patient_name: STRING
+  duration_seconds: INTEGER
+  created_at: DATE
 }
 ```
 
@@ -409,8 +449,8 @@ MedEasy/
 ### **Autenticação**
 
 ```
-POST /api/auth/register          # Registrar novo usuário
-POST /api/auth/login             # Login de usuário
+POST /api/auth/register    # Registrar novo usuário
+POST /api/auth/login       # Login de usuário
 ```
 
 ### **Medicamentos**
@@ -429,14 +469,41 @@ POST /api/medicamentos/calcular-dosagem
 ### **Inteligência Artificial**
 
 ```
-POST /api/ia-suggestion          # Obter sugestão de tratamento via IA
-     Body: { symptoms: string }
+POST /api/ia-suggestion
+     Body: { symptoms: string, patientAge?: string }
+     # Consulta REMUME e retorna sugestão + lista de medicamentos recomendados
+```
+
+### **Prescrições** *(requer auth)*
+
+```
+POST /api/prescricoes
+     Body: { patient_name, patient_age, symptoms, treatment, ia_suggestion? }
+     # Salva prescrição vinculada ao médico logado
+
+GET  /api/prescricoes
+     # Lista todas as prescrições do médico logado
+```
+
+### **Transcrição** *(requer auth)*
+
+```
+POST /api/transcription/transcribe
+     Body: multipart/form-data { audio: File }
+     # Transcreve áudio via Whisper (ou Gemini como fallback)
+
+POST /api/transcription/save
+     Body: { title, content, patientName, durationSeconds }
+
+GET  /api/transcription/list
+GET  /api/transcription/:id
+DELETE /api/transcription/:id
 ```
 
 ### **Administração**
 
 ```
-POST /api/medicamentos/admin/*   # Rotas administrativas (protegidas)
+POST /api/medicamentos/admin/*    # Rotas administrativas (protegidas)
 ```
 
 ---
@@ -445,10 +512,10 @@ POST /api/medicamentos/admin/*   # Rotas administrativas (protegidas)
 
 ### **Pré-requisitos**
 
-- Node.js (v16 ou superior)
-- MySQL (v8 ou superior)
-- NPM ou Yarn
-- Conta Google Cloud com API Key para Gemini
+- Node.js (v18 ou superior)
+- Conta Supabase (PostgreSQL)
+- Google AI Studio API Key (Gemini)
+- OpenAI API Key (Whisper) — recomendado para transcrição
 
 ### **1. Clone o Repositório**
 
@@ -460,55 +527,57 @@ cd MedEasy
 ### **2. Configurar Backend**
 
 ```bash
-# Navegar para a pasta do servidor
 cd server
-
-# Instalar dependências
 npm install
-
-# Criar arquivo .env
-# Copie o conteúdo abaixo e ajuste com suas credenciais
+cp .env.example .env
+# Edite server/.env com suas credenciais
 ```
 
-**Arquivo `.env` do servidor (SQLite local por padrao):**
+**Arquivo `server/.env`:**
 
 ```env
-# Porta do servidor
 PORT=5000
 
-# Banco de dados local em arquivo
-DB_DIALECT=sqlite
-DB_STORAGE=./data/medeasy.sqlite
+JWT_SECRET=troque_esta_chave
+JWT_EXPIRES_IN=1d
 
-# JWT Secret (use uma string aleatória e segura)
-JWT_SECRET=sua_chave_secreta_super_segura_aqui
+# Supabase — Settings > API
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_KEY=sua_service_role_key
 
-# Google Gemini API
-GOOGLE_API_KEY=sua_chave_api_do_google_aqui
+# PostgreSQL — Settings > Database > Connection string > URI
+DATABASE_URL=postgresql://postgres:senha@db.xxxx.supabase.co:5432/postgres
+
+# Google Gemini — https://aistudio.google.com/app/apikey
+GOOGLE_API_KEY=sua_chave_google
+
+# OpenAI Whisper — https://platform.openai.com/api-keys
+OPENAI_API_KEY=sk-sua_chave_openai
 ```
 
-### **3. Configurar Banco de Dados**
+### **3. Popular o Banco de Dados**
 
-Para desenvolvimento local, nenhum banco externo precisa ser criado.
+Execute os arquivos SQL no **Supabase SQL Editor**:
 
-Ao iniciar o backend, o Sequelize cria automaticamente o arquivo SQLite em `server/data/medeasy.sqlite` e gera as tabelas.
+```bash
+# 1. Categorias e medicamentos REMUME 2025-2026 (~454 itens)
+database/remume_seed.sql
 
-As instrucoes em MySQL abaixo passam a ser opcionais, apenas para quem quiser usar um banco externo.
+# 2. Tabela de prescrições com RLS
+database/prescricoes_migration.sql
+```
+
+Verificação após o seed:
 
 ```sql
--- Criar banco de dados
-CREATE DATABASE medeasy_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- O Sequelize criará as tabelas automaticamente ao iniciar o servidor
+SELECT COUNT(*) FROM categorias;    -- deve retornar 21
+SELECT COUNT(*) FROM medicamentos;  -- deve retornar ~454
 ```
 
 ### **4. Configurar Frontend**
 
 ```bash
-# Voltar para a raiz do projeto
 cd ..
-
-# Instalar dependências
 npm install
 ```
 
@@ -533,7 +602,7 @@ npm start
 npm run dev
 ```
 
-O frontend estará disponível em: `http://localhost:5173`  
+O frontend estará disponível em: `http://localhost:5173`
 O backend estará disponível em: `http://localhost:5000`
 
 #### **Opção 2: Executar Simultaneamente**
@@ -545,17 +614,13 @@ npm run electron:dev
 ### **Modo Produção**
 
 ```bash
-# Build do frontend
 npm run build
-
-# Executar aplicação
 npm run preview
 ```
 
 ### **Modo Electron (Desktop)**
 
 ```bash
-# Executar como aplicação desktop
 npm run electron
 ```
 
@@ -564,10 +629,12 @@ npm run electron
 ## Segurança
 
 - Senhas criptografadas com **bcrypt** (10 rounds de salt)
-- Autenticação via **JWT** com expiração de 24 horas
-- Validação de CRM para médicos
+- Autenticação via **JWT** com expiração configurável
+- Token armazenado em `sessionStorage` (não persiste entre abas)
 - Rotas protegidas com middleware de autenticação
 - Controle de acesso baseado em roles
+- **Row Level Security (RLS)** habilitado no Supabase para prescrições
+- Uploads de áudio limitados a **25 MB** e deletados após transcrição
 - Validação de entrada com **Zod**
 - Proteção CORS configurada
 
@@ -590,46 +657,41 @@ npm run electron
   - Idade do paciente
   - Sintomas observados
   - Tratamento prescrito
-- Botão "Gerar com IA" para sugestões automáticas
-- Prévia da prescrição antes de salvar
-- Opção de impressão
+- Botão "Gerar Sugestão IA" consulta a REMUME e retorna medicamentos recomendados
+- Clique em um medicamento para adicioná-lo automaticamente ao campo de tratamento
+- Prévia da prescrição após salvar
+- Opção de impressão em A4
 - Dados do médico automaticamente incluídos
 
 ### **3. Sugestão de Tratamento por IA**
 
-- Integração com Google Gemini 2.0 Flash
-- Análise de sintomas descritos
-- Sugestão de medicamentos apropriados
-- Recomendações de dosagem e frequência
-- Orientações gerais de tratamento
+- Motor primário: **Google Gemini 2.0 Flash**
+- Motor de fallback: **GPT-4o-mini (OpenAI)** — ativado automaticamente se o Gemini falhar
+- A IA recebe a lista completa da REMUME como contexto e escolhe apenas medicamentos disponíveis
+- Retorna pelo menos 2 recomendações com posologia e justificativa clínica
+- Cards coloridos por categoria com badges de disponibilidade
 
-### **4. Catálogo de Medicamentos**
+### **4. Transcrição com Diarização**
 
-- Organização por categorias (antibióticos, analgésicos, etc.)
+- Modo padrão: grava microfone e transcreve com Whisper
+- Modo Google Meet: captura dois fluxos simultâneos
+  - Microfone do médico → rótulo `🩺 Médico`
+  - Áudio da reunião → rótulo `👤 Paciente`
+- Transcrição ordenada cronologicamente com identificação de falante
+
+### **5. Catálogo de Medicamentos**
+
+- Organização por 21 categorias ATC
 - Filtro por faixa etária:
-  - Recém-nascido
-  - Lactente
-  - Pré-escolar
-  - Escolar
-  - Adolescente
-  - Adulto
-  - Idoso
+  - Recém-nascido, Lactente, Pré-escolar, Escolar, Adolescente, Adulto, Idoso
 - Informações completas de cada medicamento
 - Visualização de posologias adequadas
 
-### **5. Cálculo de Dosagem**
+### **6. Cálculo de Dosagem**
 
 - Entrada de dados do paciente (peso, idade)
-- Seleção do medicamento
-- Cálculo automático baseado em:
-  - Dose por kg de peso
-  - Faixa etária
-  - Dose máxima permitida
-- Exibição de:
-  - Dose calculada
-  - Frequência de administração
-  - Dose diária total
-  - Observações importantes
+- Cálculo automático baseado em dose/kg e faixa etária
+- Dose máxima diária permitida com alertas
 
 ---
 
@@ -640,7 +702,9 @@ npm run electron
 3. **/register** - Cadastro de novos usuários
 4. **/dashboard** - Dashboard principal (protegida)
 5. **/prescription** - Criar prescrição (apenas médicos)
-6. **/dosage** - Cálculo de dosagens (protegida)
+6. **/medications** - Catálogo REMUME
+7. **/transcription** - Transcrição de consultas
+8. **/dosage** - Cálculo de dosagens (protegida)
 
 ---
 
@@ -648,13 +712,18 @@ npm run electron
 
 ### **Backend (server/.env)**
 
-```env
-PORT=5000
-DB_DIALECT=sqlite
-DB_STORAGE=./data/medeasy.sqlite
-JWT_SECRET=chave_secreta_jwt
-GOOGLE_API_KEY=chave_api_google_gemini
-```
+
+| Variável         | Obrigatório | Descrição                           |
+| ---------------- | ----------- | ----------------------------------- |
+| `PORT`           | Não         | Porta do backend (padrão: 5000)     |
+| `JWT_SECRET`     | Sim         | Chave para assinar tokens JWT       |
+| `JWT_EXPIRES_IN` | Não         | Expiração dos tokens (padrão: `1d`) |
+| `SUPABASE_URL`   | Sim         | URL do projeto Supabase             |
+| `SUPABASE_KEY`   | Sim         | Service Role Key do Supabase        |
+| `DATABASE_URL`   | Sim         | Connection string PostgreSQL        |
+| `GOOGLE_API_KEY` | Sim         | Gemini 2.0 Flash — sugestões de tratamento (primário) |
+| `OPENAI_API_KEY` | Sim         | GPT-4o-mini (fallback sugestões) + Whisper (transcrição) |
+
 
 ---
 
@@ -681,17 +750,23 @@ npm start             # Inicia servidor Express
 
 ## Troubleshooting
 
+### `**Unrecognized file format` no Whisper**
+
+- O Whisper infere o formato pelo nome do arquivo. O backend renomeia automaticamente o upload com a extensão correta baseada no `Content-Type`. Verifique se o blob gravado está enviando o `mimetype` correto.
+
 ### **Erro de conexão com banco de dados**
 
-- Verifique se o MySQL está rodando
-- Confirme as credenciais no arquivo `.env`
-- Verifique se o banco de dados foi criado
+- Verifique se `DATABASE_URL` está correto no `.env`
+- Confirme se o IP está na allowlist do Supabase (Settings > Database)
+
+### **Sugestão IA retorna lista vazia**
+
+- Confirme se o seed foi executado: `SELECT COUNT(*) FROM medicamentos` (deve retornar ~454)
 
 ### **Erro na API do Google**
 
 - Confirme se a `GOOGLE_API_KEY` está correta no `.env`
-- Verifique se a API está habilitada no Google Cloud Console
-- Verifique os limites de uso da API
+- Verifique se a API Gemini está habilitada no Google AI Studio
 
 ### **Erro JWT_SECRET não encontrado**
 
@@ -707,7 +782,7 @@ npm start             # Inicia servidor Express
 
 ## Autor
 
-**Victor Naza**  
+**Victor Naza**
 GitHub: [@Victor-Naza](https://github.com/Victor-Naza)
 
 ---
@@ -720,23 +795,22 @@ Este projeto é de uso educacional e foi desenvolvido como projeto integrador.
 
 ## Próximas Funcionalidades (Roadmap)
 
-- [ ] Dashboard com estatísticas e gráficos
-- [ ] Histórico completo de prescrições
-- [ ] Sistema de impressão avançado (PDF)
-- [ ] Integração com sistemas de farmácia
-- [ ] Prontuário eletrônico do paciente
-- [ ] Notificações e alertas
-- [ ] Modo dark/light
-- [ ] Exportação de relatórios
-- [ ] Integração com outros modelos de IA
-- [ ] App mobile (React Native)
+- Dashboard com estatísticas e gráficos
+- Histórico completo de prescrições com filtros
+- Sistema de impressão avançado (PDF)
+- Integração com sistemas de farmácia
+- Prontuário eletrônico do paciente
+- Notificações e alertas
+- Modo dark/light
+- Exportação de relatórios
+- App mobile (React Native)
 
 ---
 
 ## Suporte
 
-Para dúvidas ou problemas, abra uma issue no repositório:  
-https://github.com/Victor-Naza/MedEasy/issues
+Para dúvidas ou problemas, abra uma issue no repositório:
+[https://github.com/Victor-Naza/MedEasy/issues](https://github.com/Victor-Naza/MedEasy/issues)
 
 ---
 

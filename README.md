@@ -43,8 +43,6 @@
 
 ### **Outras Tecnologias**
 
-- **Electron** - Framework para criar aplicações desktop
-- **Concurrently** - Executar múltiplos comandos simultaneamente
 - **dotenv** - Gerenciamento de variáveis de ambiente
 
 ---
@@ -342,9 +340,6 @@ MedEasy/
 │   ├── remume_seed.sql           # ~454 medicamentos REMUME 2025-2026
 │   └── prescricoes_migration.sql # Tabela prescricoes + RLS
 │
-├── electron/
-│   └── main.js
-│
 ├── uploads/tmp/                  # Áudios temporários (deletados após transcrição)
 ├── index.html
 ├── package.json
@@ -605,23 +600,11 @@ npm run dev
 O frontend estará disponível em: `http://localhost:5173`
 O backend estará disponível em: `http://localhost:5000`
 
-#### **Opção 2: Executar Simultaneamente**
-
-```bash
-npm run electron:dev
-```
-
 ### **Modo Produção**
 
 ```bash
 npm run build
 npm run preview
-```
-
-### **Modo Electron (Desktop)**
-
-```bash
-npm run electron
 ```
 
 ---
@@ -732,12 +715,10 @@ npm run electron
 ### **Frontend**
 
 ```bash
-npm run dev           # Inicia servidor de desenvolvimento
-npm run build         # Build para produção
-npm run lint          # Executa linter
-npm run preview       # Preview do build de produção
-npm run electron      # Executa aplicação Electron
-npm run electron:dev  # Dev mode com Electron
+npm run dev       # Inicia servidor de desenvolvimento
+npm run build     # Build para produção
+npm run lint      # Executa linter
+npm run preview   # Preview do build de produção
 ```
 
 ### **Backend**
